@@ -34,6 +34,7 @@ from core.signal_engine import DARARSignalEngine
 from core.benchmark_engine import DARARBenchmarkEngine
 from core.live_dataset_engine import LiveDatasetEngine
 from core.analytics_engine import DARARAnalyticsEngine
+from core.surveillance_engine import ContinuousSurveillanceEngine
 
 app = FastAPI(
     title="DARAR Distributed Coherent Radar Simulation API",
@@ -67,6 +68,7 @@ physics_engine = DARARPhysicsEngine(baseline_length=60.0, target_dist=10000.0, d
 signal_engine = DARARSignalEngine(snr_db=10.0, rcc_window_points=5, num_samples=128)
 live_dataset_engine = LiveDatasetEngine()
 analytics_engine = DARARAnalyticsEngine()
+surveillance_engine = ContinuousSurveillanceEngine(beamwidth_deg=14.0)
 benchmark_cache: Optional[Dict[str, Any]] = None
 active_target_metadata: Dict[str, Any] = {
     "source": "simulated_uav",
@@ -450,15 +452,53 @@ def get_fig13_benchmark():
     return benchmark_cache
 
 
+@app.post("/api/surveillance/mode")
+def set_surveillance_mode(mode: str = "async_360"):
+    """Switches between continuous 360° independent scanning ('async_360') and synchronized ('coherent_sync')."""
+    if mode not in ("async_360", "coherent_sync"):
+        mode = "async_360"
+    surveillance_engine.set_mode(mode)
+    return {"mode": surveillance_engine.mode, "radar_angles_deg": surveillance_engine.radar_angles_deg}
+
+
+@app.post("/api/surveillance/step")
+def step_surveillance():
+    """Executes one continuous 360° surveillance, fusion, tracking & alert step."""
+    state = physics_engine.step_servo_synchronization()
+    surv = surveillance_engine.step(
+        radar_nodes=physics_engine.nodes,
+        target_pos=physics_engine.target.pos,
+        target_vel=physics_engine.target.velocity,
+        snr_db=signal_engine.snr_db,
+        rotation_speed_rpm=physics_engine.rotation_speed_rpm,
+        callsign=active_target_metadata.get("callsign", "UAV-TGT")
+    )
+    return {"physics": state, "surveillance": surv}
+
+
+@app.post("/api/surveillance/reset")
+def reset_surveillance():
+    surveillance_engine.reset()
+    return {"status": "reset", "mode": surveillance_engine.mode}
+
+
 @app.websocket("/ws/simulation")
 async def websocket_simulation_stream(websocket: WebSocket):
-    """Real-time streaming WebSocket endpoint for continuous live 3D animation & telemetry."""
+    """Real-time streaming WebSocket endpoint for continuous live 3D animation, fusion & rapid alerts."""
     await websocket.accept()
     try:
         while True:
             # Advance physical simulation
             state = physics_engine.step_servo_synchronization()
             delays = physics_engine.compute_all_propagation_delays()
+            surv = surveillance_engine.step(
+                radar_nodes=physics_engine.nodes,
+                target_pos=physics_engine.target.pos,
+                target_vel=physics_engine.target.velocity,
+                snr_db=signal_engine.snr_db,
+                rotation_speed_rpm=physics_engine.rotation_speed_rpm,
+                callsign=active_target_metadata.get("callsign", "UAV-TGT")
+            )
 
             payload = {
                 "cycle": state["cycle"],
@@ -469,7 +509,8 @@ async def websocket_simulation_stream(websocket: WebSocket):
                 "max_error_deg": state["max_error_deg"],
                 "is_synchronized": state["is_synchronized"],
                 "drone_pos": state["drone_pos"],
-                "delays_matrix_us": (delays * 1e6).tolist()
+                "delays_matrix_us": (delays * 1e6).tolist(),
+                "surveillance": surv
             }
             await websocket.send_json(payload)
             await asyncio.sleep(0.05)  # 20 Hz telemetry stream

@@ -169,6 +169,10 @@
 
         <!-- 3D Viewport Controls Top Right -->
         <div class="absolute top-3 right-3 z-10 flex items-center gap-2 pointer-events-auto">
+          <div class="flex bg-radar-950/90 backdrop-blur-md border border-radar-700/80 rounded-lg p-0.5 text-[11px] font-mono">
+            <button id="btn-surv-async" class="px-2.5 py-0.5 rounded bg-emerald-500 text-radar-950 font-bold" title="All 3 radars scan 360° independently with immediate detection & fusion">360° Async Fusion</button>
+            <button id="btn-surv-sync" class="px-2.5 py-0.5 rounded text-slate-300 hover:text-white" title="Coherent beam-synchronized illumination (Paper Sec 3.1)">Coherent Sync</button>
+          </div>
           <button id="btn-toggle-wavefronts" class="px-2.5 py-1 rounded bg-radar-950/80 backdrop-blur-md border border-radar-700/60 text-xs font-mono text-radar-green hover:bg-radar-800 flex items-center gap-1.5">
             <i data-lucide="radio" class="w-3.5 h-3.5"></i> RF Pulses: <span id="wavefront-status">ON</span>
           </button>
@@ -230,6 +234,64 @@
                 <span class="text-slate-400">Servo Speed:</span>
                 <span id="hud-rpm-val" class="text-slate-200">10 RPM</span>
               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CONTINUOUS 360° SURVEILLANCE, MULTI-RADAR FUSION & RAPID ALERT CONSOLE -->
+      <div class="bg-radar-900 rounded-xl border border-radar-800 p-3 space-y-2.5">
+        <div class="flex flex-wrap items-center justify-between border-b border-radar-800 pb-2 gap-2">
+          <div class="flex items-center gap-2">
+            <i data-lucide="shield-alert" class="w-4 h-4 text-rose-400 animate-pulse"></i>
+            <h2 class="text-xs font-bold uppercase font-mono tracking-wider text-white">Continuous 360° Asynchronous Fusion & Rapid Alert Console</h2>
+          </div>
+          <div class="flex items-center gap-2 text-[11px] font-mono">
+            <span class="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30" id="surv-mode-badge">MODE: 360° ASYNC (ZERO-WAIT)</span>
+            <button id="btn-reset-tracks" class="px-2 py-0.5 rounded bg-radar-800 hover:bg-radar-700 text-slate-300 border border-radar-700">Clear Tracks</button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-2.5 text-xs font-mono">
+          <!-- Panel 1: Independent Radar Observation Stream -->
+          <div class="bg-radar-950 rounded-lg border border-radar-800 p-2.5 space-y-1.5">
+            <div class="text-[10px] text-radar-cyan uppercase font-bold border-b border-radar-800 pb-1 flex justify-between">
+              <span>Independent Radar Hits</span>
+              <span class="text-slate-400">No Full-Scan Wait</span>
+            </div>
+            <div id="surv-obs-log" class="space-y-1 max-h-[125px] overflow-y-auto text-[10px] text-slate-300">
+              <div class="text-slate-500 italic">Waiting for beam-target intersection...</div>
+            </div>
+          </div>
+
+          <!-- Panel 2: Fused Target Track State -->
+          <div class="bg-radar-950 rounded-lg border border-radar-800 p-2.5 space-y-1.5">
+            <div class="text-[10px] text-emerald-400 uppercase font-bold border-b border-radar-800 pb-1 flex justify-between">
+              <span>Multi-Radar Fused Track</span>
+              <span id="trk-radars-badges" class="flex gap-1">
+                <span class="px-1 rounded bg-radar-800 text-slate-500" id="trk-r1-badge">R1</span>
+                <span class="px-1 rounded bg-radar-800 text-slate-500" id="trk-r2-badge">R2</span>
+                <span class="px-1 rounded bg-radar-800 text-slate-500" id="trk-r3-badge">R3</span>
+              </span>
+            </div>
+            <div id="surv-track-card" class="grid grid-cols-2 gap-1.5 text-[11px] pt-0.5">
+              <div><span class="text-slate-400">Track ID:</span> <span id="trk-id" class="text-white font-bold">--</span></div>
+              <div><span class="text-slate-400">Conf:</span> <span id="trk-conf" class="text-emerald-400 font-bold">--%</span></div>
+              <div><span class="text-slate-400">Range:</span> <span id="trk-range" class="text-radar-cyan">-- km</span></div>
+              <div><span class="text-slate-400">Azimuth:</span> <span id="trk-az" class="text-radar-cyan">--°</span></div>
+              <div><span class="text-slate-400">Speed:</span> <span id="trk-speed" class="text-amber-400">-- m/s</span></div>
+              <div><span class="text-slate-400">Heading:</span> <span id="trk-heading" class="text-amber-400">--°</span></div>
+            </div>
+          </div>
+
+          <!-- Panel 3: Rapid Threat Alerts -->
+          <div class="bg-radar-950 rounded-lg border border-radar-800 p-2.5 space-y-1.5">
+            <div class="text-[10px] text-rose-400 uppercase font-bold border-b border-radar-800 pb-1 flex justify-between">
+              <span>Rapid Threat Alerts</span>
+              <span class="text-slate-400">Instant Assessment</span>
+            </div>
+            <div id="surv-alerts-log" class="space-y-1 max-h-[125px] overflow-y-auto text-[10px]">
+              <div class="text-slate-500 italic">No active threat alerts yet...</div>
             </div>
           </div>
         </div>

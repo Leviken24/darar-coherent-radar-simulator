@@ -551,9 +551,13 @@ function initWebSocket() {
 }
 
 function updateLivePhysicalTelemetry(data) {
-  // Update turntable angles in 3D scene (Equations 10-12)
-  if (data.servo_angles && state.three.radarTurrets.length === 3) {
-    data.servo_angles.forEach((angleDeg, idx) => {
+  const surv = data.surveillance;
+  const useAsync360 = surv && surv.mode === 'async_360';
+
+  // Update turntable angles in 3D scene
+  const angles = useAsync360 ? surv.radar_angles_deg : data.servo_angles;
+  if (angles && state.three.radarTurrets.length === 3) {
+    angles.forEach((angleDeg, idx) => {
       const turret = state.three.radarTurrets[idx];
       // Three.js Y-rotation in radians
       turret.rotation.y = -THREE.MathUtils.degToRad(angleDeg);
@@ -561,20 +565,32 @@ function updateLivePhysicalTelemetry(data) {
   }
 
   // Update HUD pointing angles
-  if (data.world_pointing_angles) {
-    document.getElementById('r1-pointing-angle').textContent = `${data.world_pointing_angles[0].toFixed(1)}°`;
-    document.getElementById('r2-pointing-angle').textContent = `${data.world_pointing_angles[1].toFixed(1)}°`;
-    document.getElementById('r3-pointing-angle').textContent = `${data.world_pointing_angles[2].toFixed(1)}°`;
+  const displayAngles = useAsync360 ? surv.radar_angles_deg : data.world_pointing_angles;
+  if (displayAngles) {
+    document.getElementById('r1-pointing-angle').textContent = `${displayAngles[0].toFixed(1)}°`;
+    document.getElementById('r2-pointing-angle').textContent = `${displayAngles[1].toFixed(1)}°`;
+    document.getElementById('r3-pointing-angle').textContent = `${displayAngles[2].toFixed(1)}°`;
   }
 
   // Update spatial sync status badge
   const syncElem = document.getElementById('hud-sync-status');
-  if (data.is_synchronized) {
+  if (useAsync360) {
+    syncElem.className = 'text-radar-cyan font-semibold flex items-center gap-1.5';
+    syncElem.innerHTML = '<span class="w-2 h-2 rounded-full bg-radar-cyan animate-pulse"></span> 360° ASYNC SCAN';
+  } else if (data.is_synchronized) {
     syncElem.className = 'text-emerald-400 font-semibold flex items-center gap-1.5';
     syncElem.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-400"></span> SYNCHRONIZED (&lt;0.1°)';
   } else {
     syncElem.className = 'text-amber-400 font-semibold flex items-center gap-1.5';
     syncElem.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span> CONVERGING (${data.max_error_deg.toFixed(1)}°)`;
+  }
+
+  // Update Continuous Surveillance, Fusion & Rapid Alert Console
+  if (surv) {
+    if (surv.step_hits && surv.step_hits.length > 0 && state.three.droneMesh) {
+      emitEchoWavefront(state.three.droneMesh.position);
+    }
+    updateSurveillanceConsole(surv);
   }
 }
 
@@ -1307,6 +1323,15 @@ function initEventHandlers() {
     loadOutfieldCycle(cyc);
   };
   document.getElementById('btn-export-telemetry').onclick = exportTelemetryJSON;
+
+  // Continuous 360° Surveillance Mode Toggle
+  document.getElementById('btn-surv-async').onclick = () => setSurveillanceMode('async_360');
+  document.getElementById('btn-surv-sync').onclick = () => setSurveillanceMode('coherent_sync');
+  document.getElementById('btn-reset-tracks').onclick = async () => {
+    await fetch('/api/surveillance/reset', { method: 'POST' });
+    document.getElementById('surv-obs-log').innerHTML = '<div class="text-slate-500 italic">Waiting for beam-target intersection...</div>';
+    document.getElementById('surv-alerts-log').innerHTML = '<div class="text-slate-500 italic">No active threat alerts yet...</div>';
+  };
 }
 
 function update3DRadarBaselines(baselineM) {
@@ -1640,5 +1665,90 @@ async function fetchAntennaPattern() {
     Plotly.react(el, [trace], layout, { responsive: true, displayModeBar: false });
   } catch (err) {
     console.error('Antenna pattern error:', err);
+  }
+}
+
+
+// ==========================================
+// 12. CONTINUOUS 360° SURVEILLANCE & ALERT UI
+// ==========================================
+async function setSurveillanceMode(mode) {
+  const btnAsync = document.getElementById('btn-surv-async');
+  const btnSync = document.getElementById('btn-surv-sync');
+  const badge = document.getElementById('surv-mode-badge');
+
+  if (mode === 'async_360') {
+    btnAsync.className = 'px-2.5 py-0.5 rounded bg-emerald-500 text-radar-950 font-bold';
+    btnSync.className = 'px-2.5 py-0.5 rounded text-slate-300 hover:text-white';
+    if (badge) badge.textContent = 'MODE: 360° ASYNC (ZERO-WAIT)';
+  } else {
+    btnSync.className = 'px-2.5 py-0.5 rounded bg-radar-cyan text-radar-950 font-bold';
+    btnAsync.className = 'px-2.5 py-0.5 rounded text-slate-300 hover:text-white';
+    if (badge) badge.textContent = 'MODE: COHERENT SYNC (α-FILTER)';
+  }
+
+  try {
+    await fetch(`/api/surveillance/mode?mode=${mode}`, { method: 'POST' });
+  } catch (err) {
+    console.error('Failed to switch surveillance mode:', err);
+  }
+}
+
+function updateSurveillanceConsole(surv) {
+  if (!surv) return;
+
+  // 1. Independent Radar Observations Log
+  const obsLog = document.getElementById('surv-obs-log');
+  if (obsLog && surv.recent_observations && surv.recent_observations.length > 0) {
+    obsLog.innerHTML = surv.recent_observations.map(o => {
+      const rColor = o.radar_id === 1 ? 'text-radar-cyan' : (o.radar_id === 2 ? 'text-emerald-400' : 'text-amber-400');
+      return `<div class="flex justify-between border-b border-radar-900 pb-0.5">
+        <span><span class="${rColor} font-bold">${o.radar_name}</span> HIT @ ${o.timestamp.toFixed(2)}s</span>
+        <span class="text-slate-400">${(o.range_m / 1000).toFixed(2)}km | ${o.processing_latency_ms}ms</span>
+      </div>`;
+    }).join('');
+  }
+
+  // 2. Multi-Radar Fused Track Card
+  if (surv.tracks && surv.tracks.length > 0) {
+    const trk = surv.tracks[0];
+    document.getElementById('trk-id').textContent = trk.track_id;
+    document.getElementById('trk-conf').textContent = `${trk.confidence.toFixed(1)}%`;
+    document.getElementById('trk-range').textContent = `${(trk.range_m / 1000).toFixed(2)} km`;
+    document.getElementById('trk-az').textContent = `${trk.azimuth_deg.toFixed(1)}°`;
+    document.getElementById('trk-speed').textContent = `${trk.speed_ms.toFixed(1)} m/s`;
+    document.getElementById('trk-heading').textContent = `${trk.heading_deg.toFixed(0)}°`;
+
+    [1, 2, 3].forEach(rid => {
+      const b = document.getElementById(`trk-r${rid}-badge`);
+      if (b) {
+        if (trk.contributing_radars.includes(rid)) {
+          b.className = 'px-1 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 font-bold';
+        } else {
+          b.className = 'px-1 rounded bg-radar-800 text-slate-500';
+        }
+      }
+    });
+  }
+
+  // 3. Rapid Threat Alerts Log
+  const alertsLog = document.getElementById('surv-alerts-log');
+  if (alertsLog && surv.alerts && surv.alerts.length > 0) {
+    alertsLog.innerHTML = surv.alerts.map(a => {
+      const sevClass = a.severity === 'CRITICAL'
+        ? 'bg-rose-500/15 border-rose-500/40 text-rose-300'
+        : (a.severity === 'HIGH'
+          ? 'bg-amber-500/15 border-amber-500/40 text-amber-300'
+          : 'bg-radar-cyan/10 border-radar-cyan/30 text-radar-cyan');
+      return `<div class="p-1.5 rounded border ${sevClass}">
+        <div class="flex justify-between font-bold">
+          <span>[${a.severity}] ${a.track_id}</span>
+          <span>${a.confidence.toFixed(0)}% • ${a.latency_ms}ms</span>
+        </div>
+        <div class="text-[9px] text-slate-300 mt-0.5">
+          Rng ${a.range_km}km @ ${a.azimuth_deg}° | Vel ${a.speed_ms}m/s → ${a.heading_deg}° (${a.contributing_radars.length}/3 Radars)
+        </div>
+      </div>`;
+    }).join('');
   }
 }
