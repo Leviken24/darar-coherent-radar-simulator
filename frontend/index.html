@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Distributed Coherent Radar Simulation Environment (DARAR Digital Twin)</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            radar: {
+              950: '#050b14',
+              900: '#0a1628',
+              850: '#0e1f38',
+              800: '#142b4d',
+              700: '#1e3d6b',
+              cyan: '#00f0ff',
+              green: '#00ff66',
+              amber: '#ffb700',
+              rose: '#ff0055'
+            }
+          },
+          fontFamily: {
+            mono: ['JetBrains Mono', 'Fira Code', 'Consolas', 'monospace'],
+            sans: ['Inter', 'system-ui', 'sans-serif']
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- KaTeX for live mathematical equations -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+
+  <!-- Three.js + OrbitControls -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+  <!-- Plotly.js for scientific benchmarks -->
+  <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="bg-radar-950 text-slate-100 font-sans min-h-screen overflow-x-hidden selection:bg-radar-cyan selection:text-black">
+
+  <!-- TOP HUD BAR -->
+  <header class="border-b border-radar-800 bg-radar-900/90 backdrop-blur-md sticky top-0 z-50 px-4 py-2.5 flex flex-wrap items-center justify-between gap-4">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-lg bg-radar-cyan/10 border border-radar-cyan/40 flex items-center justify-center text-radar-cyan shadow-[0_0_15px_rgba(0,240,255,0.2)]">
+        <i data-lucide="radar" class="w-5 h-5 animate-pulse"></i>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="text-base font-bold tracking-wider text-white uppercase font-mono">DARAR DIGITAL TWIN</h1>
+          <span class="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-radar-cyan/20 text-radar-cyan border border-radar-cyan/40">RESEARCH SIMULATOR</span>
+          <span class="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">JSEE 2026 METHODOLOGY</span>
+        </div>
+        <p class="text-xs text-slate-400">Distributed Aperture Rotating Array Radar • 3-Node Coherent Synthesis Engine</p>
+      </div>
+    </div>
+
+    <!-- Live Telemetry Badges -->
+    <div class="flex items-center gap-2.5 text-xs font-mono">
+      <div class="px-2.5 py-1.5 rounded bg-radar-850 border border-radar-800 flex items-center gap-2">
+        <span class="text-slate-400">DATA SOURCE:</span>
+        <span id="hud-data-source" class="text-emerald-400 font-bold flex items-center gap-1">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> LOADING...
+        </span>
+      </div>
+
+      <div class="px-2.5 py-1.5 rounded bg-radar-850 border border-radar-800 flex items-center gap-2">
+        <span class="text-slate-400">SYNC:</span>
+        <span id="hud-sync-status" class="text-amber-400 font-semibold flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span> CONVERGING
+        </span>
+      </div>
+
+      <div class="px-2.5 py-1.5 rounded bg-radar-850 border border-radar-800 flex items-center gap-2">
+        <span class="text-slate-400">TARGET:</span>
+        <span id="hud-target-info" class="text-radar-cyan font-semibold">UAV @ 10.0 km</span>
+      </div>
+
+      <div class="px-2.5 py-1.5 rounded bg-radar-850 border border-radar-800 flex items-center gap-2">
+        <span class="text-slate-400">DOPPLER:</span>
+        <span id="hud-doppler-val" class="text-amber-400 font-semibold">+0.73 kHz</span>
+      </div>
+
+      <div class="px-2.5 py-1.5 rounded bg-radar-850 border border-radar-800 flex items-center gap-2">
+        <span class="text-slate-400">GAIN:</span>
+        <span id="hud-gain-val" class="text-radar-green font-bold text-sm">+8.69 dB</span>
+        <span class="text-[10px] text-slate-400">(η: <span id="hud-eff-val" class="text-emerald-400">82.3%</span>)</span>
+      </div>
+
+      <!-- Mode Switcher -->
+      <div class="flex bg-radar-800 p-0.5 rounded-lg border border-radar-700">
+        <button id="btn-mode-guided" class="px-2.5 py-1 text-xs font-medium rounded-md transition-all bg-radar-cyan text-radar-950 font-bold shadow-sm flex items-center gap-1.5">
+          <i data-lucide="compass" class="w-3.5 h-3.5"></i> Guided
+        </button>
+        <button id="btn-mode-lab" class="px-2.5 py-1 text-xs font-medium rounded-md transition-all text-slate-300 hover:text-white flex items-center gap-1.5">
+          <i data-lucide="sliders" class="w-3.5 h-3.5"></i> Lab
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- LIVE AIRSPACE & REAL-WORLD DATASET BAR -->
+  <div class="bg-radar-900/70 border-b border-radar-800 px-4 py-2 max-w-[1920px] mx-auto flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
+    <div class="flex flex-wrap items-center gap-2.5">
+      <span class="text-radar-cyan font-bold flex items-center gap-1.5">
+        <i data-lucide="satellite" class="w-4 h-4"></i> LIVE TARGET FEED:
+      </span>
+      <select id="live-adsb-select" class="bg-radar-850 border border-radar-700 rounded px-2.5 py-1 text-xs text-white min-w-[260px]">
+        <option value="">Loading live OpenSky ADS-B aircraft...</option>
+      </select>
+      <button id="btn-refresh-adsb" class="px-2.5 py-1 rounded bg-radar-800 hover:bg-radar-700 border border-radar-700 text-radar-cyan flex items-center gap-1">
+        <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Fetch Live Sky
+      </button>
+      <button id="btn-load-outfield" class="px-2.5 py-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 flex items-center gap-1">
+        <i data-lucide="database" class="w-3.5 h-3.5"></i> Paper Outfield UAV (17km, 20 Cycles)
+      </button>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <div id="outfield-cycle-bar" class="hidden items-center gap-2 bg-radar-850 border border-radar-700 rounded px-2.5 py-1">
+        <span class="text-emerald-400">Outfield Cycle:</span>
+        <input type="range" id="outfield-cycle-slider" min="1" max="20" value="1" class="w-24 accent-emerald-400">
+        <span id="outfield-cycle-label" class="text-white font-bold">1 / 20</span>
+      </div>
+      <button id="btn-export-telemetry" class="px-2.5 py-1 rounded bg-radar-800 hover:bg-radar-700 border border-radar-700 text-amber-400 flex items-center gap-1">
+        <i data-lucide="download" class="w-3.5 h-3.5"></i> Export IQ Telemetry (JSON)
+      </button>
+    </div>
+  </div>
+
+  <!-- MAIN SIMULATION WORKSPACE -->
+  <main class="grid grid-cols-1 lg:grid-cols-12 gap-3 p-3 max-w-[1920px] mx-auto">
+
+    <!-- LEFT COLUMN: 3D DIGITAL TWIN & MISSION STAGE CONTROLS (8 Cols) -->
+    <section class="lg:col-span-8 flex flex-col gap-3">
+
+      <!-- 3D SIMULATION CONTAINER -->
+      <div class="relative bg-radar-900 rounded-xl border border-radar-800 overflow-hidden shadow-2xl h-[520px] flex flex-col">
+        <!-- 3D Viewport Header Overlay -->
+        <div class="absolute top-3 left-3 z-10 flex flex-wrap items-center gap-2 pointer-events-auto">
+          <span class="px-2.5 py-1 rounded bg-radar-950/80 backdrop-blur-md border border-radar-700/60 text-xs font-mono text-radar-cyan flex items-center gap-1.5">
+            <i data-lucide="box" class="w-3.5 h-3.5"></i> 3D VIRTUAL RADAR ENVIRONMENT
+          </span>
+
+          <!-- Camera Presets -->
+          <div class="flex bg-radar-950/80 backdrop-blur-md border border-radar-700/60 rounded-lg p-0.5 text-xs font-mono">
+            <button id="cam-orbit" class="px-2 py-0.5 rounded bg-radar-800 text-white font-medium hover:bg-radar-700" title="Free Orbit View">Orbit</button>
+            <button id="cam-top" class="px-2 py-0.5 rounded text-slate-300 hover:text-white hover:bg-radar-800" title="Top-Down Tactical View">Top-Down</button>
+            <button id="cam-drone" class="px-2 py-0.5 rounded text-slate-300 hover:text-white hover:bg-radar-800" title="Target Drone View">Drone Cam</button>
+            <button id="cam-r1" class="px-2 py-0.5 rounded text-slate-300 hover:text-white hover:bg-radar-800" title="Radar 1 (Reference) Close-up">Radar 1</button>
+            <button id="cam-r2" class="px-2 py-0.5 rounded text-slate-300 hover:text-white hover:bg-radar-800" title="Radar 2 (West) Close-up">Radar 2</button>
+            <button id="cam-r3" class="px-2 py-0.5 rounded text-slate-300 hover:text-white hover:bg-radar-800" title="Radar 3 (East) Close-up">Radar 3</button>
+          </div>
+        </div>
+
+        <!-- 3D Viewport Controls Top Right -->
+        <div class="absolute top-3 right-3 z-10 flex items-center gap-2 pointer-events-auto">
+          <button id="btn-toggle-wavefronts" class="px-2.5 py-1 rounded bg-radar-950/80 backdrop-blur-md border border-radar-700/60 text-xs font-mono text-radar-green hover:bg-radar-800 flex items-center gap-1.5">
+            <i data-lucide="radio" class="w-3.5 h-3.5"></i> RF Pulses: <span id="wavefront-status">ON</span>
+          </button>
+          <button id="btn-toggle-beams" class="px-2.5 py-1 rounded bg-radar-950/80 backdrop-blur-md border border-radar-700/60 text-xs font-mono text-radar-cyan hover:bg-radar-800 flex items-center gap-1.5">
+            <i data-lucide="cone" class="w-3.5 h-3.5"></i> Beams: <span id="beam-status">ON</span>
+          </button>
+          <button id="btn-sim-play" class="px-3 py-1 rounded bg-emerald-500 hover:bg-emerald-400 text-radar-950 font-bold text-xs font-mono flex items-center gap-1.5 shadow-lg shadow-emerald-500/20">
+            <i data-lucide="play" class="w-3.5 h-3.5"></i> RUN
+          </button>
+          <button id="btn-sim-reset" class="px-2.5 py-1 rounded bg-radar-800 hover:bg-radar-700 text-slate-300 text-xs font-mono flex items-center gap-1">
+            <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+          </button>
+        </div>
+
+        <!-- Three.js Canvas Container -->
+        <div id="threejs-container" class="w-full h-full cursor-grab active:cursor-grabbing"></div>
+
+        <!-- 3D Overlay Bottom HUD -->
+        <div class="absolute bottom-3 left-3 right-3 z-10 pointer-events-none flex flex-wrap items-end justify-between gap-3 text-xs font-mono">
+          <!-- Station Geodetic Coordinates Readout -->
+          <div class="bg-radar-950/85 backdrop-blur-md border border-radar-800 rounded-lg p-2.5 pointer-events-auto space-y-1">
+            <div class="text-[10px] text-slate-400 uppercase font-semibold flex items-center gap-1.5 border-b border-radar-800 pb-1">
+              <i data-lucide="map-pin" class="w-3 h-3 text-radar-cyan"></i> Station INS Coordinates (Baseline: <span id="hud-baseline-len">60</span>m)
+            </div>
+            <div class="grid grid-cols-3 gap-3 text-[11px] pt-0.5">
+              <div>
+                <span class="text-radar-cyan font-bold">R1 (Ref):</span>
+                <div class="text-slate-300">0.0m, θ₀: 0°</div>
+                <div class="text-[10px] text-emerald-400">Pointing: <span id="r1-pointing-angle">0.0°</span></div>
+              </div>
+              <div>
+                <span class="text-radar-cyan font-bold">R2 (West):</span>
+                <div class="text-slate-300">-60.0m, θ₀: 30°</div>
+                <div class="text-[10px] text-emerald-400">Pointing: <span id="r2-pointing-angle">0.0°</span></div>
+              </div>
+              <div>
+                <span class="text-radar-cyan font-bold">R3 (East):</span>
+                <div class="text-slate-300">+60.0m, θ₀: 330°</div>
+                <div class="text-[10px] text-emerald-400">Pointing: <span id="r3-pointing-angle">0.0°</span></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Target Kinematics & Propagation Time -->
+          <div class="bg-radar-950/85 backdrop-blur-md border border-radar-800 rounded-lg p-2.5 pointer-events-auto space-y-1">
+            <div class="text-[10px] text-slate-400 uppercase font-semibold border-b border-radar-800 pb-1">
+              Electromagnetic Propagation (t = d / c)
+            </div>
+            <div class="flex items-center gap-4 text-[11px] pt-0.5">
+              <div>
+                <span class="text-slate-400">Two-Way Delay τ₁₁:</span>
+                <span id="hud-tau11" class="text-radar-cyan font-bold">66.71 μs</span>
+              </div>
+              <div>
+                <span class="text-slate-400">Max Differential Delay:</span>
+                <span id="hud-diff-delay" class="text-amber-400 font-bold">0.12 μs</span>
+              </div>
+              <div>
+                <span class="text-slate-400">Servo Speed:</span>
+                <span id="hud-rpm-val" class="text-slate-200">10 RPM</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 6-STAGE SCIENTIFIC TIMELINE NAVIGATOR (Continuous Methodology) -->
+      <div class="bg-radar-900 rounded-xl border border-radar-800 p-3">
+        <div class="flex items-center justify-between border-b border-radar-800 pb-2 mb-2.5">
+          <div class="flex items-center gap-2">
+            <i data-lucide="git-commit" class="w-4 h-4 text-radar-cyan"></i>
+            <h2 class="text-xs font-bold uppercase font-mono tracking-wider text-white">6-Stage Research Methodology Pipeline</h2>
+          </div>
+          <div class="text-xs text-slate-400 font-mono">
+            Active: <span id="pipeline-active-badge" class="text-radar-cyan font-bold">Stage 1: Spatial Synchronization</span>
+          </div>
+        </div>
+
+        <!-- Stage Buttons Grid -->
+        <div class="grid grid-cols-2 md:grid-cols-6 gap-2" id="stage-tabs-container">
+          <button data-stage="1" class="stage-tab active px-2.5 py-2 rounded-lg border text-left transition-all">
+            <div class="text-[10px] text-radar-cyan font-mono font-bold">STAGE 1</div>
+            <div class="text-xs font-semibold text-white truncate">Spatial Sync</div>
+            <div class="text-[10px] text-slate-400 truncate">α-filter rotation</div>
+          </button>
+
+          <button data-stage="2" class="stage-tab px-2.5 py-2 rounded-lg border text-left transition-all">
+            <div class="text-[10px] text-slate-400 font-mono font-bold">STAGE 2</div>
+            <div class="text-xs font-semibold text-white truncate">Propagation</div>
+            <div class="text-[10px] text-slate-400 truncate">t = d / c delay</div>
+          </button>
+
+          <button data-stage="3" class="stage-tab px-2.5 py-2 rounded-lg border text-left transition-all">
+            <div class="text-[10px] text-slate-400 font-mono font-bold">STAGE 3</div>
+            <div class="text-xs font-semibold text-white truncate">Signal Lab</div>
+            <div class="text-[10px] text-slate-400 truncate">9 Raw Echoes</div>
+          </button>
+
+          <button data-stage="4" class="stage-tab px-2.5 py-2 rounded-lg border text-left transition-all">
+            <div class="text-[10px] text-slate-400 font-mono font-bold">STAGE 4</div>
+            <div class="text-xs font-semibold text-white truncate">Coarse Comp</div>
+            <div class="text-[10px] text-slate-400 truncate">INS Baseline Δt</div>
+          </button>
+
+          <button data-stage="5" class="stage-tab px-2.5 py-2 rounded-lg border text-left transition-all">
+            <div class="text-[10px] text-slate-400 font-mono font-bold">STAGE 5</div>
+            <div class="text-xs font-semibold text-white truncate">RCC Fine</div>
+            <div class="text-[10px] text-slate-400 truncate">Small-scale peak</div>
+          </button>
+
+          <button data-stage="6" class="stage-tab px-2.5 py-2 rounded-lg border text-left transition-all">
+            <div class="text-[10px] text-slate-400 font-mono font-bold">STAGE 6</div>
+            <div class="text-xs font-semibold text-white truncate">Synthesis</div>
+            <div class="text-[10px] text-slate-400 truncate">+8.69 dB Gain</div>
+          </button>
+        </div>
+
+        <!-- Stage Dynamic Guidance & Math Explanation Deck -->
+        <div id="stage-guidance-deck" class="mt-3 p-3 rounded-lg bg-radar-850/80 border border-radar-800 text-xs font-mono space-y-2">
+          <!-- Dynamically populated by app.js based on active stage -->
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT COLUMN: INTERACTIVE CONTROLS & DIAGNOSTICS (4 Cols) -->
+    <aside class="lg:col-span-4 flex flex-col gap-3">
+
+      <!-- GUIDED MISSION / EXPERIMENTAL LABORATORY PANEL -->
+      <div class="bg-radar-900 rounded-xl border border-radar-800 p-3.5 space-y-3">
+        <div class="flex items-center justify-between border-b border-radar-800 pb-2">
+          <div class="flex items-center gap-2">
+            <i data-lucide="sliders" class="w-4 h-4 text-radar-cyan"></i>
+            <h2 id="control-panel-title" class="text-xs font-bold uppercase font-mono tracking-wider text-white">Mission Control & Parameters</h2>
+          </div>
+          <span class="text-[10px] px-2 py-0.5 rounded bg-radar-cyan/10 text-radar-cyan font-mono border border-radar-cyan/30">REAL-TIME MATH ENGINE</span>
+        </div>
+
+        <!-- Guided Stepper Actions (Only visible in Guided Mode) -->
+        <div id="guided-mode-controls" class="space-y-2.5">
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-slate-400">Guided Scenario Step:</span>
+            <span id="guided-step-counter" class="text-radar-cyan font-bold font-mono">1 / 6</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <button id="btn-prev-stage" class="flex-1 py-1.5 px-3 rounded bg-radar-800 hover:bg-radar-700 text-xs font-medium flex items-center justify-center gap-1 text-slate-300">
+              <i data-lucide="chevron-left" class="w-4 h-4"></i> Previous
+            </button>
+            <button id="btn-next-stage" class="flex-1 py-1.5 px-3 rounded bg-radar-cyan hover:bg-cyan-400 text-radar-950 text-xs font-bold flex items-center justify-center gap-1 shadow-md shadow-radar-cyan/20">
+              Next Stage <i data-lucide="chevron-right" class="w-4 h-4"></i>
+            </button>
+          </div>
+          <button id="btn-auto-tour" class="w-full py-1.5 px-3 rounded border border-radar-700 hover:bg-radar-800 text-xs font-mono text-slate-300 flex items-center justify-center gap-1.5">
+            <i data-lucide="play-circle" class="w-4 h-4 text-emerald-400"></i> Auto-Run Complete Scientific Methodology
+          </button>
+        </div>
+
+        <!-- Experimental Parameters Form (Visible in Lab Mode & adjustable) -->
+        <div id="lab-parameters-form" class="space-y-3 pt-1">
+          <!-- Parameter: Baseline Length -->
+          <div>
+            <div class="flex justify-between text-xs font-mono mb-1">
+              <span class="text-slate-300">Radar Baseline Length:</span>
+              <span id="val-baseline" class="text-radar-cyan font-bold">60 m</span>
+            </div>
+            <input type="range" id="param-baseline" min="20" max="400" step="10" value="60" class="w-full accent-radar-cyan cursor-pointer">
+            <div class="flex justify-between text-[10px] text-slate-500 font-mono">
+              <span>20 m (Compact)</span>
+              <span>60 m (Field Exp)</span>
+              <span>400 m (Far-Field Max)</span>
+            </div>
+          </div>
+
+          <!-- Parameter: Drone Target Distance -->
+          <div>
+            <div class="flex justify-between text-xs font-mono mb-1">
+              <span class="text-slate-300">Drone Target Distance:</span>
+              <span id="val-distance" class="text-radar-cyan font-bold">10.0 km</span>
+            </div>
+            <input type="range" id="param-distance" min="5" max="25" step="0.5" value="10" class="w-full accent-radar-cyan cursor-pointer">
+            <div class="flex justify-between text-[10px] text-slate-500 font-mono">
+              <span>5 km</span>
+              <span>10 km (Sim)</span>
+              <span>17 km (Outfield)</span>
+              <span>25 km</span>
+            </div>
+          </div>
+
+          <!-- Parameter: Signal-to-Noise Ratio (SNR) -->
+          <div>
+            <div class="flex justify-between text-xs font-mono mb-1">
+              <span class="text-slate-300">Single Echo SNR:</span>
+              <span id="val-snr" class="text-radar-green font-bold">10.0 dB</span>
+            </div>
+            <input type="range" id="param-snr" min="5" max="25" step="1" value="10" class="w-full accent-radar-green cursor-pointer">
+            <div class="flex justify-between text-[10px] text-slate-500 font-mono">
+              <span>5 dB (Extreme Noise)</span>
+              <span>8-13 dB (Paper Regime)</span>
+              <span>25 dB</span>
+            </div>
+          </div>
+
+          <!-- Parameter: RCC Search Window (Paper: 3, 5, 7 points) -->
+          <div>
+            <div class="flex justify-between text-xs font-mono mb-1">
+              <span class="text-slate-300">RCC Search Window (n points):</span>
+              <span id="val-rcc-win" class="text-amber-400 font-bold">±5 points (250 ns)</span>
+            </div>
+            <div class="grid grid-cols-3 gap-2">
+              <button data-rcc="3" class="rcc-btn py-1 px-2 rounded border border-radar-700 text-xs font-mono text-center hover:border-radar-cyan">±3 pts</button>
+              <button data-rcc="5" class="rcc-btn active py-1 px-2 rounded border border-radar-cyan bg-radar-cyan/20 text-radar-cyan text-xs font-mono text-center font-bold">±5 pts</button>
+              <button data-rcc="7" class="rcc-btn py-1 px-2 rounded border border-radar-700 text-xs font-mono text-center hover:border-radar-cyan">±7 pts</button>
+            </div>
+          </div>
+
+          <!-- Parameter: Channel Phase Jitter & INS Error -->
+          <div class="grid grid-cols-2 gap-2 pt-1">
+            <div>
+              <label class="text-[11px] text-slate-400 font-mono block mb-1">INS Pos Error (m):</label>
+              <input type="number" id="param-ins-error" min="0" max="5" step="0.1" value="0.5" class="w-full bg-radar-850 border border-radar-700 rounded px-2 py-1 text-xs font-mono text-white">
+            </div>
+            <div>
+              <label class="text-[11px] text-slate-400 font-mono block mb-1">Phase Jitter (°):</label>
+              <input type="number" id="param-phase-jitter" min="0" max="45" step="1" value="5" class="w-full bg-radar-850 border border-radar-700 rounded px-2 py-1 text-xs font-mono text-white">
+            </div>
+          </div>
+
+          <!-- Preset Configurations -->
+          <div class="pt-2 border-t border-radar-800">
+            <span class="text-[10px] text-slate-400 uppercase font-mono block mb-1.5">Load Research Paper Benchmark Presets:</span>
+            <div class="grid grid-cols-2 gap-1.5">
+              <button id="preset-outfield" class="py-1 px-2 rounded bg-radar-850 hover:bg-radar-800 border border-radar-700 text-[10px] font-mono text-slate-300 text-left">
+                🎯 Outfield UAV (17km, 60m)
+              </button>
+              <button id="preset-lowsnr" class="py-1 px-2 rounded bg-radar-850 hover:bg-radar-800 border border-radar-700 text-[10px] font-mono text-slate-300 text-left">
+                ⚡ Low SNR Stress (8 dB)
+              </button>
+              <button id="preset-farfield" class="py-1 px-2 rounded bg-radar-850 hover:bg-radar-800 border border-radar-700 text-[10px] font-mono text-slate-300 text-left">
+                📡 Max Baseline (400m)
+              </button>
+              <button id="preset-ideal" class="py-1 px-2 rounded bg-radar-850 hover:bg-radar-800 border border-radar-700 text-[10px] font-mono text-slate-300 text-left">
+                ✨ High-SNR Ideal (+9.54 dB)
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- QUANTITATIVE COHERENT SYNTHESIS METRICS CARD -->
+      <div class="bg-radar-900 rounded-xl border border-radar-800 p-3.5 space-y-3">
+        <div class="flex items-center justify-between border-b border-radar-800 pb-2">
+          <div class="flex items-center gap-2">
+            <i data-lucide="activity" class="w-4 h-4 text-emerald-400"></i>
+            <h2 class="text-xs font-bold uppercase font-mono tracking-wider text-white">Coherent Synthesis Analytics</h2>
+          </div>
+          <span class="text-[10px] text-slate-400 font-mono">KL = 3×3 = 9 Channels</span>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2 text-xs font-mono">
+          <div class="p-2.5 rounded-lg bg-radar-850 border border-radar-800">
+            <span class="text-[10px] text-slate-400 block">Single Radar SNR (SNRs):</span>
+            <span id="metric-single-snr" class="text-base font-bold text-white">10.0 dB</span>
+          </div>
+
+          <div class="p-2.5 rounded-lg bg-radar-850 border border-radar-800">
+            <span class="text-[10px] text-slate-400 block">Synthesized SNR (SNRc):</span>
+            <span id="metric-synth-snr" class="text-base font-bold text-radar-green">18.5 dB</span>
+          </div>
+
+          <div class="p-2.5 rounded-lg bg-radar-850 border border-radar-800">
+            <span class="text-[10px] text-slate-400 block">Measured SNR Gain:</span>
+            <span id="metric-actual-gain" class="text-base font-bold text-radar-cyan">+8.5 dB</span>
+            <span class="text-[10px] text-slate-400 block">Ideal: +9.54 dB</span>
+          </div>
+
+          <div class="p-2.5 rounded-lg bg-radar-850 border border-radar-800">
+            <span class="text-[10px] text-slate-400 block">Synthesis Efficiency (η):</span>
+            <span id="metric-efficiency" class="text-base font-bold text-emerald-400">82.3%</span>
+            <span class="text-[10px] text-slate-400 block">Paper Target: >80%</span>
+          </div>
+        </div>
+
+        <!-- Efficiency Bar -->
+        <div>
+          <div class="flex justify-between text-[11px] font-mono text-slate-400 mb-1">
+            <span>Coherent Synthesis Efficiency (Eq. 23):</span>
+            <span id="metric-eff-bar-text" class="text-emerald-400 font-bold">82.3%</span>
+          </div>
+          <div class="w-full bg-radar-800 rounded-full h-2.5 overflow-hidden">
+            <div id="metric-eff-bar" class="bg-gradient-to-r from-radar-cyan to-emerald-400 h-2.5 rounded-full transition-all duration-500" style="width: 82.3%"></div>
+          </div>
+        </div>
+
+        <!-- Processing Method Comparison Table -->
+        <div class="border-t border-radar-800 pt-2 text-[11px] font-mono">
+          <span class="text-[10px] text-slate-400 uppercase block mb-1.5 font-semibold">Algorithm Performance Comparison:</span>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-slate-300">
+              <thead class="text-[10px] uppercase text-slate-500 border-b border-radar-800">
+                <tr>
+                  <th class="py-1">Method</th>
+                  <th class="py-1">Gain (dB)</th>
+                  <th class="py-1">Efficiency</th>
+                </tr>
+              </thead>
+              <tbody id="metrics-comparison-tbody" class="divide-y divide-radar-850">
+                <tr>
+                  <td class="py-1 text-slate-400">Before Comp</td>
+                  <td class="py-1 text-rose-400" id="cmp-raw-gain">+0.8 dB</td>
+                  <td class="py-1 text-rose-400" id="cmp-raw-eff">12.1%</td>
+                </tr>
+                <tr>
+                  <td class="py-1 text-slate-400">Peak Picking (PP)</td>
+                  <td class="py-1 text-amber-400" id="cmp-pp-gain">+5.2 dB</td>
+                  <td class="py-1 text-amber-400" id="cmp-pp-eff">36.5%</td>
+                </tr>
+                <tr>
+                  <td class="py-1 text-slate-400">Conventional CC</td>
+                  <td class="py-1 text-amber-400" id="cmp-cc-gain">+6.1 dB</td>
+                  <td class="py-1 text-amber-400" id="cmp-cc-eff">45.2%</td>
+                </tr>
+                <tr class="font-bold text-radar-cyan bg-radar-cyan/10">
+                  <td class="py-1 pl-1">Proposed RCC (5 pts)</td>
+                  <td class="py-1" id="cmp-rcc-gain">+8.69 dB</td>
+                  <td class="py-1 text-emerald-400" id="cmp-rcc-eff">82.3%</td>
+                </tr>
+                <tr class="text-slate-500">
+                  <td class="py-1">Theoretical Upper Bound</td>
+                  <td class="py-1">+9.54 dB</td>
+                  <td class="py-1">100.0%</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- FULL-WIDTH LOWER SECTION: SIGNAL PROCESSING LABORATORY & BENCHMARKS (12 Cols) -->
+    <section class="lg:col-span-12 grid grid-cols-1 lg:grid-cols-12 gap-3">
+
+      <!-- 9-CHANNEL OSCILLOSCOPE DECK (7 Cols) -->
+      <div class="lg:col-span-7 bg-radar-900 rounded-xl border border-radar-800 p-3.5 space-y-3">
+        <div class="flex flex-wrap items-center justify-between border-b border-radar-800 pb-2 gap-2">
+          <div class="flex items-center gap-2">
+            <i data-lucide="gauge" class="w-4 h-4 text-radar-cyan"></i>
+            <h2 class="text-xs font-bold uppercase font-mono tracking-wider text-white">Signal Processing Laboratory: 9-Channel Oscilloscope Deck</h2>
+          </div>
+          <!-- Channel Selector Pill Filter -->
+          <div class="flex items-center gap-1.5 text-xs font-mono">
+            <span class="text-slate-400 text-[10px]">DISPLAY:</span>
+            <select id="osc-view-mode" class="bg-radar-850 border border-radar-700 rounded px-2 py-0.5 text-xs font-mono text-radar-cyan">
+              <option value="raw">Stage 3: Raw Received Echoes (Misaligned)</option>
+              <option value="coarse">Stage 4: First-Level Coarse Compensated</option>
+              <option value="rcc" selected>Stage 5: Second-Level RCC Fine Aligned</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Oscilloscope Multi-Trace Canvas Container -->
+        <div class="relative bg-radar-950 rounded-lg border border-radar-800 p-2 overflow-hidden">
+          <canvas id="oscilloscope-canvas" class="w-full h-[280px] block"></canvas>
+          <!-- Phosphor Grid Overlay Elements -->
+          <div class="absolute top-3 left-4 text-[10px] font-mono text-radar-green/80 flex items-center gap-3 pointer-events-none">
+            <span>SWEEP: 50 ns / div (fs = 20 MHz)</span>
+            <span>BANDWIDTH: 5 MHz</span>
+            <span>ORTHOGONAL PHASE CODED (C-BAND)</span>
+          </div>
+          <div class="absolute bottom-3 right-4 text-[10px] font-mono text-radar-cyan pointer-events-none">
+            TARGET RANGE CELL: <span id="osc-target-cell">BIN 30</span>
+          </div>
+        </div>
+
+        <!-- 9 Channels Trace Legend & Status Matrix -->
+        <div class="grid grid-cols-3 md:grid-cols-9 gap-1.5 text-[10px] font-mono" id="channel-legend-grid">
+          <!-- Populated by app.js: S11 to S33 with individual peak amplitude, lag, phase -->
+        </div>
+      </div>
+
+      <!-- RIGHT SIDE: RCC CORRELATION INSPECTOR & SYNTHESIS CHAMBER (5 Cols) -->
+      <div class="lg:col-span-5 flex flex-col gap-3">
+
+        <!-- REGIONAL CROSS-CORRELATION (RCC) INSPECTOR -->
+        <div class="bg-radar-900 rounded-xl border border-radar-800 p-3.5 space-y-2.5">
+          <div class="flex items-center justify-between border-b border-radar-800 pb-2">
+            <div class="flex items-center gap-2">
+              <i data-lucide="git-merge" class="w-4 h-4 text-amber-400"></i>
+              <h2 class="text-xs font-bold uppercase font-mono tracking-wider text-white">Stage 5: RCC Correlation Peak Inspector</h2>
+            </div>
+            <select id="rcc-channel-select" class="bg-radar-850 border border-radar-700 rounded px-2 py-0.5 text-[11px] font-mono text-amber-400">
+              <option value="S21">S21 ⊗ S11* (Radar 2 Tx → Radar 1 Rx)</option>
+              <option value="S22" selected>S22 ⊗ S11* (Radar 2 Self-Channel)</option>
+              <option value="S23">S23 ⊗ S11* (Radar 2 Tx → Radar 3 Rx)</option>
+              <option value="S31">S31 ⊗ S11* (Radar 3 Tx → Radar 1 Rx)</option>
+              <option value="S33">S33 ⊗ S11* (Radar 3 Self-Channel)</option>
+            </select>
+          </div>
+
+          <!-- RCC Plot Container -->
+          <div class="relative bg-radar-950 rounded-lg border border-radar-800 p-1">
+            <div id="rcc-correlation-plot" class="w-full h-[180px]"></div>
+          </div>
+          <p class="text-[11px] text-slate-400 font-mono leading-relaxed">
+            <span class="text-amber-400 font-bold">Research Discovery:</span> At low SNR, conventional cross-correlation picks noise spikes across the full range gate.
+            RCC restricts peak search to the <span class="text-radar-cyan font-bold">±<span id="rcc-win-label">5</span> sample window</span>, guaranteeing target lock.
+          </p>
+        </div>
+
+        <!-- COHERENT SYNTHESIS COMPARISON CHAMBER -->
+        <div class="bg-radar-900 rounded-xl border border-radar-800 p-3.5 space-y-2.5">
+          <div class="flex items-center justify-between border-b border-radar-800 pb-2">
+            <div class="flex items-center gap-2">
+              <i data-lucide="layers" class="w-4 h-4 text-radar-green"></i>
+              <h2 class="text-xs font-bold uppercase font-mono tracking-wider text-white">Stage 6: Synthesized Waveform (Before vs After)</h2>
+            </div>
+            <span class="text-[10px] text-emerald-400 font-mono font-bold">+8.69 dB GAIN</span>
+          </div>
+
+          <!-- Synthesis Waveform Plot -->
+          <div class="relative bg-radar-950 rounded-lg border border-radar-800 p-1">
+            <div id="synthesis-comparison-plot" class="w-full h-[180px]"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ADVANCED DSP WORKSTATION: IQ PHASORS + RANGE-DOPPLER + 3D LOSS SURFACE (12 Cols) -->
+      <div class="lg:col-span-6 bg-radar-900 rounded-xl border border-radar-800 p-3.5 space-y-2.5">
+        <div class="flex items-center justify-between border-b border-radar-800 pb-2">
+          <div class="flex items-center gap-2">
+            <i data-lucide="compass" class="w-4 h-4 text-radar-cyan"></i>
+            <h2 class="text-xs font-bold uppercase font-mono tracking-wider text-white">Complex I/Q Phasor Alignment (Before vs. After RCC)</h2>
+          </div>
+          <span class="text-[10px] text-slate-400 font-mono">9 Channel Vectors (S₁₁–S₃₃)</span>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div class="bg-radar-950 rounded-lg border border-radar-800 p-1">
+            <div class="text-[10px] text-rose-400 font-mono text-center pt-1">Before Comp (Scattered Phases)</div>
+            <div id="phasor-before-plot" class="w-full h-[220px]"></div>
+          </div>
+          <div class="bg-radar-950 rounded-lg border border-radar-800 p-1">
+            <div class="text-[10px] text-emerald-400 font-mono text-center pt-1">After RCC (Coherent Vector Sum)</div>
+            <div id="phasor-after-plot" class="w-full h-[220px]"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="lg:col-span-6 bg-radar-900 rounded-xl border border-radar-800 p-3.5 space-y-2.5">
+        <div class="flex items-center justify-between border-b border-radar-800 pb-2">
+          <div class="flex items-center gap-2">
+            <i data-lucide="grid" class="w-4 h-4 text-radar-green"></i>
+            <h2 class="text-xs font-bold uppercase font-mono tracking-wider text-white">2D Range-Doppler Detection Matrix (Single vs. Coherent)</h2>
+          </div>
+          <span class="text-[10px] text-emerald-400 font-mono" id="rd-doppler-badge">vr: +20.0 m/s</span>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div class="bg-radar-950 rounded-lg border border-radar-800 p-1">
+            <div class="text-[10px] text-amber-400 font-mono text-center pt-1">Single Radar (10 dB Noise Floor)</div>
+            <div id="rd-single-plot" class="w-full h-[220px]"></div>
+          </div>
+          <div class="bg-radar-950 rounded-lg border border-radar-800 p-1">
+            <div class="text-[10px] text-radar-green font-mono text-center pt-1">9-Ch RCC Coherent (+8.69 dB)</div>
+            <div id="rd-synth-plot" class="w-full h-[220px]"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="lg:col-span-6 bg-radar-900 rounded-xl border border-radar-800 p-3.5 space-y-2.5">
+        <div class="flex items-center justify-between border-b border-radar-800 pb-2">
+          <div class="flex items-center gap-2">
+            <i data-lucide="box" class="w-4 h-4 text-amber-400"></i>
+            <h2 class="text-xs font-bold uppercase font-mono tracking-wider text-white">3D Time-Phase Synchronization Loss Surface (Paper Fig. 5a)</h2>
+          </div>
+          <span class="text-[10px] text-rose-400 font-mono">Red Dot = Live Operating Point</span>
+        </div>
+        <div id="loss-surface-3d-plot" class="w-full h-[270px] bg-radar-950 rounded-lg border border-radar-800"></div>
+      </div>
+
+      <div class="lg:col-span-6 bg-radar-900 rounded-xl border border-radar-800 p-3.5 space-y-2.5">
+        <div class="flex items-center justify-between border-b border-radar-800 pb-2">
+          <div class="flex items-center gap-2">
+            <i data-lucide="radio" class="w-4 h-4 text-radar-cyan"></i>
+            <h2 class="text-xs font-bold uppercase font-mono tracking-wider text-white">32-Element Phased Array Beam Pattern (Paper Fig. 2a)</h2>
+          </div>
+          <span class="text-[10px] text-slate-400 font-mono">d = λ/2, N = 32 Elements</span>
+        </div>
+        <div id="antenna-pattern-plot" class="w-full h-[270px] bg-radar-950 rounded-lg border border-radar-800"></div>
+      </div>
+
+      <!-- FIGURE 13 LIVE MONTE CARLO BENCHMARK (12 Cols) -->
+      <div class="lg:col-span-12 bg-radar-900 rounded-xl border border-radar-800 p-3.5 space-y-3">
+        <div class="flex flex-wrap items-center justify-between border-b border-radar-800 pb-2 gap-2">
+          <div class="flex items-center gap-2">
+            <i data-lucide="line-chart" class="w-4 h-4 text-radar-cyan"></i>
+            <div>
+              <h2 class="text-xs font-bold uppercase font-mono tracking-wider text-white">Live Research Benchmark: Efficiency vs SNR (Replicating Paper Figure 13)</h2>
+              <p class="text-[11px] text-slate-400">Comparing Peak Picking (PP), Conventional Cross-Correlation (CC), Proposed RCC (7, 5, 3 points), and Theoretical Upper Bound</p>
+            </div>
+          </div>
+          <button id="btn-run-fig13" class="px-3 py-1.5 rounded bg-radar-cyan hover:bg-cyan-400 text-radar-950 font-bold text-xs font-mono flex items-center gap-1.5 shadow-md shadow-radar-cyan/20">
+            <i data-lucide="cpu" class="w-3.5 h-3.5"></i> Run Live Monte Carlo Calculation
+          </button>
+        </div>
+
+        <div id="fig13-benchmark-plot" class="w-full h-[320px] bg-radar-950 rounded-lg border border-radar-800"></div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- APPLICATION SCRIPTS -->
+  <script src="/static/app.js"></script>
+</body>
+</html>

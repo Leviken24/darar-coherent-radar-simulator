@@ -1,0 +1,98 @@
+/* Custom Styling for DARAR Coherent Radar Digital Twin */
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  --radar-cyan: #00f0ff;
+  --radar-green: #00ff66;
+  --radar-amber: #ffb700;
+  --radar-rose: #ff0055;
+}
+
+body {
+  background-color: #050b14;
+  background-image: 
+    radial-gradient(circle at 50% 0%, rgba(0, 240, 255, 0.05) 0%, transparent 60%),
+    linear-gradient(rgba(20, 43, 77, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(20, 43, 77, 0.1) 1px, transparent 1px);
+  background-size: 100% 100%, 32px 32px, 32px 32px;
+}
+
+/* Oscilloscope CRT Screen styling */
+#oscilloscope-canvas {
+  filter: drop-shadow(0 0 8px rgba(0, 255, 102, 0.25));
+}
+
+/* Stage tab buttons */
+.stage-tab {
+  background: rgba(14, 31, 56, 0.6);
+  border-color: rgba(30, 61, 107, 0.8);
+}
+
+.stage-tab:hover {
+  background: rgba(20, 43, 77, 0.8);
+  border-color: rgba(0, 240, 255, 0.4);
+}
+
+.stage-tab.active {
+  background: rgba(0, 240, 255, 0.12);
+  border-color: rgba(0, 240, 255, 0.8);
+  box-shadow: 0 0 15px rgba(0, 240, 255, 0.15);
+}
+
+.stage-tab.active .truncate {
+  color: #00f0ff;
+}
+
+/* Custom Range Sliders */
+input[type=range] {
+  -webkit-appearance: none;
+  background: #142b4d;
+  height: 6px;
+  border-radius: 3px;
+  outline: none;
+}
+
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--radar-cyan);
+  cursor: pointer;
+  box-shadow: 0 0 8px var(--radar-cyan);
+  transition: transform 0.1s ease;
+}
+
+input[type=range]::-webkit-slider-thumb:hover {
+  transform: scale(1.25);
+}
+
+/* KaTeX custom formatting inside cards */
+.katex {
+  font-size: 1.05em !important;
+  color: #e2e8f0;
+}
+
+.katex-display {
+  margin: 0.3em 0 !important;
+}
+
+/* Glassmorphism scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0a1628;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1e3d6b;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #00f0ff;
+}
